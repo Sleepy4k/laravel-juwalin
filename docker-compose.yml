@@ -1,0 +1,133 @@
+###############################################################
+# docker-compose.yml — Cloud Control Panel (LXC hosting)
+#
+# Services:
+#   app       — FrankenPHP + Laravel Octane (HTTP/HTTPS)
+#   horizon   — Laravel Horizon (Redis queue worker)
+#   redis     — Redis 7 (queues + cache)
+#   db        — MySQL 8 (primary database)
+#
+# Quick start:
+#   cp .env.example .env
+#   docker compose up -d
+###############################################################
+
+services:
+
+  # ── Application (FrankenPHP + Octane) ──────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: production
+    image: ${APP_IMAGE:-lxc-panel:latest}
+    restart: unless-stopped
+    ports:
+      - "${APP_HTTP_PORT:-80}:80"
+      - "${APP_HTTPS_PORT:-443}:443"
+    environment:
+      SERVER_NAME: "${SERVER_NAME:-:80}"
+      OCTANE_SERVER: frankenphp
+      APP_ENV: production
+      APP_KEY: "${APP_KEY}"
+      APP_DEBUG: "false"
+      APP_URL: "${APP_URL}"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:-lxcpanel}"
+      DB_USERNAME: "${DB_USERNAME:-lxcpanel}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      PROXMOX_URL: "${PROXMOX_URL}"
+      PROXMOX_TOKEN_ID: "${PROXMOX_TOKEN_ID}"
+      PROXMOX_SECRET_KEY: "${PROXMOX_SECRET_KEY}"
+      PROXMOX_VERIFY_TLS: "${PROXMOX_VERIFY_TLS:-false}"
+      PROXMOX_NODE: "${PROXMOX_NODE:-pve}"
+      PROXMOX_TEMPLATE_VMID: "${PROXMOX_TEMPLATE_VMID:-9000}"
+    volumes:
+      - app-storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - panel
+
+  # ── Horizon (queue worker) ──────────────────────────────────────
+  horizon:
+    image: ${APP_IMAGE:-lxc-panel:latest}
+    restart: unless-stopped
+    command: ["php", "artisan", "horizon"]
+    environment:
+      APP_ENV: production
+      APP_KEY: "${APP_KEY}"
+      DB_CONNECTION: mysql
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_DATABASE: "${DB_DATABASE:-lxcpanel}"
+      DB_USERNAME: "${DB_USERNAME:-lxcpanel}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      QUEUE_CONNECTION: redis
+      PROXMOX_URL: "${PROXMOX_URL}"
+      PROXMOX_TOKEN_ID: "${PROXMOX_TOKEN_ID}"
+      PROXMOX_SECRET_KEY: "${PROXMOX_SECRET_KEY}"
+      PROXMOX_NODE: "${PROXMOX_NODE:-pve}"
+      PROXMOX_TEMPLATE_VMID: "${PROXMOX_TEMPLATE_VMID:-9000}"
+    volumes:
+      - app-storage:/app/storage
+    depends_on:
+      - app
+      - redis
+    networks:
+      - panel
+
+  # ── Redis ───────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - panel
+
+  # ── MySQL 8 ─────────────────────────────────────────────────────
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-secret}"
+      MYSQL_DATABASE: "${DB_DATABASE:-lxcpanel}"
+      MYSQL_USER: "${DB_USERNAME:-lxcpanel}"
+      MYSQL_PASSWORD: "${DB_PASSWORD:-secret}"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - panel
+
+networks:
+  panel:
+    driver: bridge
+
+volumes:
+  app-storage:
+  redis-data:
+  db-data:

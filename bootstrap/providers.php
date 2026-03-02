@@ -1,5 +1,9 @@
 <?php
 
+use App\Providers\AppServiceProvider;
+use Laravel\Horizon\HorizonServiceProvider;
+
 return [
-    App\Providers\AppServiceProvider::class,
+    AppServiceProvider::class,
+    HorizonServiceProvider::class,
 ];

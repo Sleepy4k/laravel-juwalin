@@ -1,0 +1,90 @@
+{
+    # FrankenPHP global options
+    # ─────────────────────────────────────────────────────────────
+    # This Caddyfile is used with Laravel Octane's FrankenPHP server.
+    # Run: php artisan octane:start --server=frankenphp --port=80
+    #
+    # For local dev via `php artisan octane:start`, Octane manages
+    # the Caddyfile itself. Use this file for production deployments.
+    #
+
+    frankenphp
+
+    # Increase this for high-concurrency workloads.
+    # Tune to (RAM - overhead) / PHP worker memory footprint.
+    order php_server before file_server
+}
+
+# ── HTTP → HTTPS redirect ────────────────────────────────────────
+(redirect_https) {
+    @http {
+        protocol http
+        not host localhost 127.0.0.1 ::1
+    }
+    redir @http https://{host}{uri} permanent
+}
+
+# ── Main virtual host ────────────────────────────────────────────
+{$SERVER_NAME:localhost} {
+
+    import redirect_https
+
+    # Let's Encrypt auto TLS (disabled for localhost/IP)
+    # tls {$TLS_EMAIL:} # uncomment + set TLS_EMAIL env var for production
+
+    root * /app/public
+
+    # Serve Vite-built assets directly from /public/build
+    @static {
+        path /build/* /favicon.ico /robots.txt
+        file
+    }
+    handle @static {
+        file_server
+    }
+
+    # ── noVNC WebSocket proxy ────────────────────────────────────────
+    # Browser connects to /vnc-proxy/... on this domain.
+    # Caddy strips the prefix, prepends /api2/json, and proxies to Proxmox
+    # server-side — so the connection comes from the server IP the VNC
+    # ticket is bound to (Proxmox rejects connections from other IPs).
+    handle_path /vnc-proxy/* {
+        rewrite * /api2/json{path}
+
+        reverse_proxy {$PROXMOX_URL:https://proxmox.thebamfams.web.id} {
+            header_up Host          {upstream_hostport}
+            header_up Origin        {$PROXMOX_URL:https://proxmox.thebamfams.web.id}
+
+            transport http {
+                tls_insecure_skip_verify
+            }
+        }
+    }
+
+    # Route all other requests through FrankenPHP worker
+    handle {
+        php_server
+    }
+
+    # Access + error logging
+    log {
+        output stdout
+        format json
+        level  INFO
+    }
+
+    # Compression
+    encode zstd br gzip
+
+    # Security headers
+    header {
+        # Prevent browsers from sniffing MIME type
+        X-Content-Type-Options  "nosniff"
+        # Protect against clickjacking
+        X-Frame-Options         "SAMEORIGIN"
+        # Enable strict HTTPS (only in production)
+        # Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        # Remove Server header
+        -Server
+    }
+}

@@ -210,6 +210,24 @@ class ProxmoxApiService
     }
 
     /**
+     * POST /api2/json/nodes/{node}/lxc/{vmid}/termproxy
+     * Returns a terminal proxy session ticket used to open an interactive
+     * shell over WebSocket (xterm.js compatible).
+     *
+     * Routes through the local nginx proxy so that this POST and the
+     * subsequent WebSocket share the same outbound IP, which is required
+     * because Proxmox binds every ticket to the requesting IP.
+     *
+     * @return array{ticket: string, port: int, upid: string}
+     */
+    public function getTermProxy(int $vmid, ?string $node = null): array
+    {
+        return $this->proxyOrDirect(
+            "nodes/{$this->resolveNode($node)}/lxc/{$vmid}/termproxy",
+        );
+    }
+
+    /**
      * POST /api2/json/nodes/{node}/lxc/{vmid}/vncproxy
      * Returns a VNC ticket used to open a websocket-based console session.
      *
@@ -221,33 +239,10 @@ class ProxmoxApiService
      */
     public function getVncProxy(int $vmid, ?string $node = null): array
     {
-        $path = "nodes/{$this->resolveNode($node)}/lxc/{$vmid}/vncproxy";
-
-        // Use the local nginx proxy URL if available so that this POST and the
-        // subsequent WebSocket both exit through the same machine/IP, ensuring
-        // Proxmox sees the same client IP for the ticket and the connection.
-        $proxyBase = rtrim((string) config('app.url'), '/');
-        $proxyUrl = "{$proxyBase}/vnc-proxy/{$path}";
-
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => "PVEAPIToken={$this->tokenId}={$this->secret}",
-                'Accept'        => 'application/json',
-            ])
-                ->withOptions(['verify' => false])
-                ->timeout($this->timeout)
-                ->asForm()
-                ->post($proxyUrl, ['websocket' => 1]);
-
-            if ($response->successful()) {
-                return (array) ($response->json('data') ?? []);
-            }
-        } catch (ConnectionException) {
-            // Proxy unreachable — fall through to direct call
-        }
-
-        // Fallback: call Proxmox directly if proxy is unavailable
-        return (array) $this->post($path, ['websocket' => 1]);
+        return $this->proxyOrDirect(
+            "nodes/{$this->resolveNode($node)}/lxc/{$vmid}/vncproxy",
+            ['websocket' => 1],
+        );
     }
 
     // ───────────────────────────── Task Polling ───────────────────────────────
@@ -373,7 +368,8 @@ class ProxmoxApiService
 
             // Prefer structured Proxmox error fields when available.
             if (is_array($json)) {
-                $errors = $json['errors'] ?? $json['message'] ?? json_encode($json);
+                $raw = $json['errors'] ?? $json['message'] ?? $json;
+                $errors = is_array($raw) ? json_encode($raw) : (string) $raw;
             } else {
                 // Non-JSON body (e.g. Proxmox Perl error, HTML 500 page)
                 $errors = trim((string) $response->body());
@@ -398,5 +394,16 @@ class ProxmoxApiService
     private function resolveNode(?string $node): string
     {
         return $node ?? $this->node;
+    }
+
+    /**
+     * POST directly to Proxmox API.
+     *
+     * @param  array<string, mixed> $body
+     * @return array<string, mixed>
+     */
+    private function proxyOrDirect(string $path, array $body = []): array
+    {
+        return (array) $this->post($path, $body);
     }
 }

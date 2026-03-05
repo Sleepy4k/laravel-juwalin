@@ -13,6 +13,18 @@ return [
 
     'url' => rtrim((string) env('PROXMOX_URL', 'https://127.0.0.1:8006'), '/'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | WebSocket Proxy URL
+    |--------------------------------------------------------------------------
+    |
+    | URL of the local WebSocket proxy that forwards to the Proxmox VNC/term
+    | endpoint. The browser will connect to this URL directly.
+    | Example: http://localhost:5345
+    |
+    */
+    'proxy_url' => rtrim((string) env('PROXMOX_PROXY_URL', 'http://localhost:5345'), '/'),
+
     'token_id' => env('PROXMOX_TOKEN_ID'),   // e.g. root@pam!laravel
 
     'secret' => env('PROXMOX_SECRET_KEY'),   // UUID generated in Datacenter > API Tokens

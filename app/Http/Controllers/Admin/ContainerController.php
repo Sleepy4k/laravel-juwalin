@@ -126,6 +126,32 @@ class ContainerController extends Controller
         ]);
     }
 
+    /**
+     * GET /admin/containers/{container}/term-url
+     * Creates a termproxy session and returns a fresh wss:// URL + ticket.
+     * The ticket must be sent as the first WebSocket message to authenticate.
+     */
+    public function termUrl(Container $container): JsonResponse
+    {
+        try {
+            $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
+            abort_if(($live['status'] ?? '') !== 'running', 422, 'Container sedang tidak berjalan.');
+        } catch (Throwable $e) {
+            abort(503, 'Tidak dapat terhubung ke Proxmox: ' . $e->getMessage());
+        }
+
+        try {
+            $termProxy = $this->proxmox->getTermProxy($container->vmid, $container->node);
+        } catch (Throwable $e) {
+            abort(503, 'Gagal membuat sesi terminal: ' . $e->getMessage());
+        }
+
+        return response()->json([
+            'wsUrl'  => $this->buildVncWsUrl($container->vmid, $container->node, $termProxy),
+            'ticket' => $termProxy['ticket'] ?? '',
+        ]);
+    }
+
     public function action(Request $request, Container $container): RedirectResponse
     {
         $request->validate(['action' => ['required', 'in:start,stop,shutdown,restart']]);
@@ -183,21 +209,19 @@ class ContainerController extends Controller
     }
 
     /**
-     * Build the wss:// URL the browser connects to.
-     * nginx (/vnc-proxy/) proxies this to Proxmox server-side so the
-     * connection comes from the server IP the VNC ticket is bound to.
+     * Build the wss:// URL the browser connects to, pointing directly at Proxmox.
      *
-     * @param array<string, mixed> $vncProxy
+     * @param array<string, mixed> $proxy
      */
-    private function buildVncWsUrl(int $vmid, string $node, array $vncProxy): string
+    private function buildVncWsUrl(int $vmid, string $node, array $proxy): string
     {
-        $parts = parse_url((string) config('app.url'));
-        $wsScheme = ($parts['scheme'] ?? 'https') === 'https' ? 'wss' : 'ws';
+        $parts = parse_url(rtrim((string) config('proxmox.proxy_url'), '/'));
+        $wsScheme = ($parts['scheme'] ?? 'http') === 'https' ? 'wss' : 'ws';
         $wsHost = $parts['host'] ?? 'localhost';
         $wsPort = isset($parts['port']) ? ":{$parts['port']}" : '';
 
-        return "{$wsScheme}://{$wsHost}{$wsPort}/vnc-proxy/nodes/{$node}/lxc/{$vmid}/vncwebsocket"
-            . '?port=' . ($vncProxy['port'] ?? '')
-            . '&vncticket=' . urlencode((string) ($vncProxy['ticket'] ?? ''));
+        return "{$wsScheme}://{$wsHost}{$wsPort}/api2/json/nodes/{$node}/lxc/{$vmid}/vncwebsocket"
+            . '?port=' . ($proxy['port'] ?? '')
+            . '&vncticket=' . urlencode((string) ($proxy['ticket'] ?? ''));
     }
 }

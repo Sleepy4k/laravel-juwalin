@@ -9,8 +9,6 @@ return new class() extends Migration {
      */
     public function up(): void
     {
-        // Remove old Midtrans keys and add Pakasir keys in the settings table.
-        // Spatie/laravel-settings stores settings as individual rows keyed by group+name.
         DB::table('settings')
             ->where('group', 'site')
             ->whereIn('name', ['payment_midtrans_server_key', 'payment_midtrans_client_key'])

@@ -66,6 +66,7 @@ Route::middleware(['auth', 'verified'])->prefix('portal')->name('portal.')->grou
     Route::get('/containers/{container}/status', [ContainerController::class, 'status'])->name('containers.status');
     Route::get('/containers/{container}/console', [ContainerController::class, 'console'])->name('containers.console');
     Route::get('/containers/{container}/vnc-url', [ContainerController::class, 'vncUrl'])->name('containers.vnc-url');
+    Route::get('/containers/{container}/term-url', [ContainerController::class, 'termUrl'])->name('containers.term-url');
     Route::post('/containers/{container}/start', [ContainerController::class, 'start'])->name('containers.start');
     Route::post('/containers/{container}/stop', [ContainerController::class, 'stop'])->name('containers.stop');
     Route::post('/containers/{container}/restart', [ContainerController::class, 'restart'])->name('containers.restart');
@@ -113,6 +114,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(sta
     Route::get('/containers/{container}/status', [Admin\ContainerController::class, 'status'])->name('containers.status');
     Route::get('/containers/{container}/console', [Admin\ContainerController::class, 'console'])->name('containers.console');
     Route::get('/containers/{container}/vnc-url', [Admin\ContainerController::class, 'vncUrl'])->name('containers.vnc-url');
+    Route::get('/containers/{container}/term-url', [Admin\ContainerController::class, 'termUrl'])->name('containers.term-url');
     Route::post('/containers/{container}/action', [Admin\ContainerController::class, 'action'])->name('containers.action');
     Route::delete('/containers/{container}', [Admin\ContainerController::class, 'destroy'])->name('containers.destroy');
 

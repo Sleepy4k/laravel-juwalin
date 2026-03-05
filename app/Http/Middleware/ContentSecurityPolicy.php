@@ -12,13 +12,20 @@ class ContentSecurityPolicy
     {
         $response = $next($request);
 
+        // Derive ws(s):// origin from the WebSocket proxy URL for the terminal.
+        $proxyParts = parse_url(rtrim((string) config('proxmox.proxy_url'), '/'));
+        $proxyWsScheme = ($proxyParts['scheme'] ?? 'http') === 'https' ? 'wss' : 'ws';
+        $proxyWsHost = $proxyParts['host'] ?? 'localhost';
+        $proxyWsPort = isset($proxyParts['port']) ? ":{$proxyParts['port']}" : '';
+        $proxmoxOrigin = "{$proxyWsScheme}://{$proxyWsHost}{$proxyWsPort}";
+
         $csp = implode('; ', [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.bunny.net https://cdn.jsdelivr.net",
-            "style-src 'self' 'unsafe-inline' https://fonts.bunny.net",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.bunny.net https://cdn.jsdelivr.net https://static.cloudflareinsights.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.bunny.net https://cdn.jsdelivr.net",
             "font-src 'self' https://fonts.bunny.net data:",
             "img-src 'self' data: blob: https:",
-            "connect-src 'self' https://app.pakasir.com",
+            "connect-src 'self' http://adip.store https://adip.store https://app.pakasir.com https://cdn.jsdelivr.net {$proxmoxOrigin}",
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self' https://app.pakasir.com",

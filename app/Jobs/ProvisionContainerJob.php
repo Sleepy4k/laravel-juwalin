@@ -9,7 +9,7 @@ use App\Enums\OrderStatus;
 use App\Mail\ContainerProvisioned;
 use App\Models\ActivityLog;
 use App\Models\Order;
-use App\Services\ProxmoxApiService;
+use App\Services\Proxmox\ProxmoxContainerService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -50,7 +50,7 @@ class ProvisionContainerJob implements ShouldQueue
     ) {}
 
     public function handle(
-        ProxmoxApiService $proxmox,
+        ProxmoxContainerService $proxmox,
         ContainerRepositoryInterface $containerRepo,
     ): void {
         $templateVmid = (int) config('proxmox.template_vmid');
@@ -167,7 +167,7 @@ class ProvisionContainerJob implements ShouldQueue
      * @throws RuntimeException when the task fails or times out
      */
     private function waitForTask(
-        ProxmoxApiService $proxmox,
+        ProxmoxContainerService $proxmox,
         string $upid,
         string $node,
         int $maxSeconds,

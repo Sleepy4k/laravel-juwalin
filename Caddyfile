@@ -43,24 +43,6 @@
         file_server
     }
 
-    # ── noVNC WebSocket proxy ────────────────────────────────────────
-    # Browser connects to /vnc-proxy/... on this domain.
-    # Caddy strips the prefix, prepends /api2/json, and proxies to Proxmox
-    # server-side — so the connection comes from the server IP the VNC
-    # ticket is bound to (Proxmox rejects connections from other IPs).
-    handle_path /vnc-proxy/* {
-        rewrite * /api2/json{path}
-
-        reverse_proxy {$PROXMOX_URL:https://proxmox.thebamfams.web.id} {
-            header_up Host          {upstream_hostport}
-            header_up Origin        {$PROXMOX_URL:https://proxmox.thebamfams.web.id}
-
-            transport http {
-                tls_insecure_skip_verify
-            }
-        }
-    }
-
     # Route all other requests through FrankenPHP worker
     handle {
         php_server

@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Portal;
 
+use App\Http\Controllers\Controller;
 use App\Http\Requests\PortForwardingRequest as PortForwardingFormRequest;
 use App\Models\PortForwardingRequest;
 use Illuminate\Http\RedirectResponse;
@@ -11,7 +12,7 @@ use Illuminate\View\View;
 class PortForwardingController extends Controller
 {
     /**
-     * GET /portal/port-forwarding.
+     * GET /portal/containers/{container}/ports.
      */
     public function index(Request $request): View
     {
@@ -25,20 +26,7 @@ class PortForwardingController extends Controller
     }
 
     /**
-     * GET /portal/port-forwarding/create.
-     */
-    public function create(Request $request): View
-    {
-        $containers = $request->user()
-            ->containers()
-            ->where('status', 'running')
-            ->get();
-
-        return view('portal.port-forwarding.create', compact('containers'));
-    }
-
-    /**
-     * POST /portal/port-forwarding.
+     * POST /portal/containers/{container}/ports.
      */
     public function store(PortForwardingFormRequest $request): RedirectResponse
     {
@@ -52,7 +40,19 @@ class PortForwardingController extends Controller
             'status'           => 'pending',
         ]);
 
-        return redirect()->route('portal.port-forwarding.index')
+        return redirect()->route('portal.ports.index', $request->integer('container_id'))
             ->with('success', 'Port forwarding request submitted. Pending admin approval.');
+    }
+
+    /**
+     * DELETE /portal/ports/{portForwardingRequest}.
+     */
+    public function destroy(Request $request, PortForwardingRequest $portForwardingRequest): RedirectResponse
+    {
+        abort_unless($portForwardingRequest->user_id === $request->user()->id, 403);
+
+        $portForwardingRequest->delete();
+
+        return back()->with('success', 'Port forwarding request dihapus.');
     }
 }

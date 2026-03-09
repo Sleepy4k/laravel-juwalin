@@ -139,7 +139,6 @@
                     return;
                 }
                 ({ wsUrl, ticket } = await resp.json());
-                console.log('[Term-Admin] wsUrl:', wsUrl);
             } catch (e) {
                 showError('Tidak dapat terhubung ke server: ' + e.message);
                 return;
@@ -163,7 +162,6 @@
             };
 
             ws.onclose = (e) => {
-                console.log('[Term-Admin] close:', { code: e.code, clean: e.wasClean, reason: e.reason });
                 showError(e.wasClean
                     ? 'Sesi console berakhir.'
                     : 'Koneksi terputus (kode ' + e.code + '). Coba refresh halaman.');

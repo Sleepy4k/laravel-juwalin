@@ -5,7 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\ContainerStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Container;
-use App\Services\ProxmoxApiService;
+use App\Services\Proxmox\ProxmoxConsoleService;
+use App\Services\Proxmox\ProxmoxContainerService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,7 +15,10 @@ use Throwable;
 
 class ContainerController extends Controller
 {
-    public function __construct(private readonly ProxmoxApiService $proxmox) {}
+    public function __construct(
+        private readonly ProxmoxContainerService $proxmox,
+        private readonly ProxmoxConsoleService $console,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -40,8 +44,8 @@ class ContainerController extends Controller
         // Sync live status from Proxmox into DB so admin sees accurate state.
         if ($container->vmid && !$container->isProvisioning()) {
             try {
-                $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
-                $synced = $this->mapProxmoxStatus($live['status'] ?? 'stopped');
+                $live = $this->proxmox->getStatus($container->vmid, $container->node);
+                $synced = ContainerStatus::fromProxmox($live['status'] ?? 'stopped');
 
                 if ($container->status !== $synced) {
                     $container->update(['status' => $synced]);
@@ -69,8 +73,8 @@ class ContainerController extends Controller
         }
 
         try {
-            $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
-            $synced = $this->mapProxmoxStatus($live['status'] ?? 'stopped');
+            $live = $this->proxmox->getStatus($container->vmid, $container->node);
+            $synced = ContainerStatus::fromProxmox($live['status'] ?? 'stopped');
 
             if ($container->status !== $synced) {
                 $container->update(['status' => $synced]);
@@ -87,67 +91,39 @@ class ContainerController extends Controller
     }
 
     /**
-     * GET /admin/containers/{container}/console.
+     * GET /admin/containers/{container}/console
+     * Renders the xterm.js console page. Status is validated lazily by the
+     * browser via the term-url JSON endpoint so the page itself never 503s.
      */
     public function console(Container $container): View
     {
-        try {
-            $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
-            abort_if(($live['status'] ?? '') !== 'running', 422, 'Container sedang tidak berjalan.');
-        } catch (Throwable $e) {
-            abort(503, 'Tidak dapat terhubung ke Proxmox: ' . $e->getMessage());
-        }
-
         return view('admin.containers.console', compact('container'));
     }
 
     /**
-     * GET /admin/containers/{container}/vnc-url
-     * Returns a fresh wss:// URL with a new VNC ticket as JSON.
-     * Called by the console view after noVNC loads to avoid ticket expiry.
-     */
-    public function vncUrl(Container $container): JsonResponse
-    {
-        try {
-            $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
-            abort_if(($live['status'] ?? '') !== 'running', 422, 'Container sedang tidak berjalan.');
-        } catch (Throwable $e) {
-            abort(503, 'Tidak dapat terhubung ke Proxmox: ' . $e->getMessage());
-        }
-
-        try {
-            $vncProxy = $this->proxmox->getVncProxy($container->vmid, $container->node);
-        } catch (Throwable $e) {
-            abort(503, 'Gagal membuat sesi VNC: ' . $e->getMessage());
-        }
-
-        return response()->json([
-            'wsUrl' => $this->buildVncWsUrl($container->vmid, $container->node, $vncProxy),
-        ]);
-    }
-
-    /**
-     * GET /admin/containers/{container}/term-url
-     * Creates a termproxy session and returns a fresh wss:// URL + ticket.
-     * The ticket must be sent as the first WebSocket message to authenticate.
+     * GET /admin/containers/{container}/term-url  (JSON).
+     *
+     * Creates a terminal proxy session server-side and returns a {wsUrl, ticket}
+     * pair. wsUrl points to PROXMOX_WS_PROXY_URL, which must forward WebSocket
+     * connections to Proxmox from the same IP that created the vncticket.
      */
     public function termUrl(Container $container): JsonResponse
     {
         try {
-            $live = $this->proxmox->getContainerStatus($container->vmid, $container->node);
+            $live = $this->proxmox->getStatus($container->vmid, $container->node);
             abort_if(($live['status'] ?? '') !== 'running', 422, 'Container sedang tidak berjalan.');
         } catch (Throwable $e) {
             abort(503, 'Tidak dapat terhubung ke Proxmox: ' . $e->getMessage());
         }
 
         try {
-            $termProxy = $this->proxmox->getTermProxy($container->vmid, $container->node);
+            $termProxy = $this->console->getTermProxy($container->vmid, $container->node);
         } catch (Throwable $e) {
             abort(503, 'Gagal membuat sesi terminal: ' . $e->getMessage());
         }
 
         return response()->json([
-            'wsUrl'  => $this->buildVncWsUrl($container->vmid, $container->node, $termProxy),
+            'wsUrl'  => $this->console->buildConsoleWsUrl($container->vmid, $container->node, $termProxy),
             'ticket' => $termProxy['ticket'] ?? '',
         ]);
     }
@@ -160,7 +136,7 @@ class ContainerController extends Controller
 
         // Guard actions against live Proxmox state to prevent spurious errors.
         try {
-            $live = $this->proxmox->getContainerStatus($container->vmid, $node);
+            $live = $this->proxmox->getStatus($container->vmid, $node);
             $isRunning = ($live['status'] ?? '') === 'running';
 
             match ($request->action) {
@@ -194,34 +170,5 @@ class ContainerController extends Controller
         $container->delete();
 
         return redirect()->route('admin.containers.index')->with('success', 'Container dihapus dari database.');
-    }
-
-    /**
-     * Map a Proxmox status string to our ContainerStatus enum.
-     */
-    private function mapProxmoxStatus(string $proxmoxStatus): ContainerStatus
-    {
-        return match ($proxmoxStatus) {
-            'running' => ContainerStatus::Running,
-            'paused', 'suspended' => ContainerStatus::Suspended,
-            default => ContainerStatus::Stopped,
-        };
-    }
-
-    /**
-     * Build the wss:// URL the browser connects to, pointing directly at Proxmox.
-     *
-     * @param array<string, mixed> $proxy
-     */
-    private function buildVncWsUrl(int $vmid, string $node, array $proxy): string
-    {
-        $parts = parse_url(rtrim((string) config('proxmox.proxy_url'), '/'));
-        $wsScheme = ($parts['scheme'] ?? 'http') === 'https' ? 'wss' : 'ws';
-        $wsHost = $parts['host'] ?? 'localhost';
-        $wsPort = isset($parts['port']) ? ":{$parts['port']}" : '';
-
-        return "{$wsScheme}://{$wsHost}{$wsPort}/api2/json/nodes/{$node}/lxc/{$vmid}/vncwebsocket"
-            . '?port=' . ($proxy['port'] ?? '')
-            . '&vncticket=' . urlencode((string) ($proxy['ticket'] ?? ''));
     }
 }

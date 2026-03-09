@@ -1,11 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin;
-use App\Http\Controllers\ContainerController;
-use App\Http\Controllers\OrderController;
 use App\Http\Controllers\Payment\PakasirWebhookController;
 use App\Http\Controllers\Portal;
-use App\Http\Controllers\PortForwardingController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public as PublicCtrl;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -54,27 +51,31 @@ Route::middleware(['auth', 'verified'])->prefix('portal')->name('portal.')->grou
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
     // Orders
-    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
-    Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
-    Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
-    Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
-    Route::delete('/orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
+    Route::get('/orders', [Portal\OrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/create', [Portal\OrderController::class, 'create'])->name('orders.create');
+    Route::post('/orders', [Portal\OrderController::class, 'store'])->name('orders.store');
+    Route::get('/orders/{order}', [Portal\OrderController::class, 'show'])->name('orders.show');
+    Route::delete('/orders/{order}', [Portal\OrderController::class, 'destroy'])->name('orders.destroy');
 
-    // Containers
-    Route::get('/containers', [ContainerController::class, 'index'])->name('containers.index');
-    Route::get('/containers/{container}', [ContainerController::class, 'show'])->name('containers.show');
-    Route::get('/containers/{container}/status', [ContainerController::class, 'status'])->name('containers.status');
-    Route::get('/containers/{container}/console', [ContainerController::class, 'console'])->name('containers.console');
-    Route::get('/containers/{container}/vnc-url', [ContainerController::class, 'vncUrl'])->name('containers.vnc-url');
-    Route::get('/containers/{container}/term-url', [ContainerController::class, 'termUrl'])->name('containers.term-url');
-    Route::post('/containers/{container}/start', [ContainerController::class, 'start'])->name('containers.start');
-    Route::post('/containers/{container}/stop', [ContainerController::class, 'stop'])->name('containers.stop');
-    Route::post('/containers/{container}/restart', [ContainerController::class, 'restart'])->name('containers.restart');
+    // Containers — listing & status
+    Route::get('/containers', [Portal\ContainerController::class, 'index'])->name('containers.index');
+    Route::get('/containers/{container}', [Portal\ContainerController::class, 'show'])->name('containers.show');
+    Route::get('/containers/{container}/status', [Portal\ContainerController::class, 'status'])->name('containers.status');
+    Route::get('/containers/resources', [Portal\ContainerController::class, 'availableResources'])->name('containers.resources');
+
+    // Containers — console
+    Route::get('/containers/{container}/console', [Portal\ContainerConsoleController::class, 'show'])->name('containers.console');
+    Route::get('/containers/{container}/term-url', [Portal\ContainerConsoleController::class, 'termUrl'])->name('containers.term-url');
+
+    // Containers — power actions
+    Route::post('/containers/{container}/start', [Portal\ContainerPowerController::class, 'start'])->name('containers.start');
+    Route::post('/containers/{container}/stop', [Portal\ContainerPowerController::class, 'stop'])->name('containers.stop');
+    Route::post('/containers/{container}/restart', [Portal\ContainerPowerController::class, 'restart'])->name('containers.restart');
 
     // Port forwarding
-    Route::get('/containers/{container}/ports', [PortForwardingController::class, 'index'])->name('ports.index');
-    Route::post('/containers/{container}/ports', [PortForwardingController::class, 'store'])->name('ports.store');
-    Route::delete('/ports/{portForwardingRequest}', [PortForwardingController::class, 'destroy'])->name('ports.destroy');
+    Route::get('/containers/{container}/ports', [Portal\PortForwardingController::class, 'index'])->name('ports.index');
+    Route::post('/containers/{container}/ports', [Portal\PortForwardingController::class, 'store'])->name('ports.store');
+    Route::delete('/ports/{portForwardingRequest}', [Portal\PortForwardingController::class, 'destroy'])->name('ports.destroy');
 
     // Billing
     Route::get('/billing', [Portal\BillingController::class, 'index'])->name('billing.index');
@@ -113,7 +114,6 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(sta
     Route::get('/containers/{container}', [Admin\ContainerController::class, 'show'])->name('containers.show');
     Route::get('/containers/{container}/status', [Admin\ContainerController::class, 'status'])->name('containers.status');
     Route::get('/containers/{container}/console', [Admin\ContainerController::class, 'console'])->name('containers.console');
-    Route::get('/containers/{container}/vnc-url', [Admin\ContainerController::class, 'vncUrl'])->name('containers.vnc-url');
     Route::get('/containers/{container}/term-url', [Admin\ContainerController::class, 'termUrl'])->name('containers.term-url');
     Route::post('/containers/{container}/action', [Admin\ContainerController::class, 'action'])->name('containers.action');
     Route::delete('/containers/{container}', [Admin\ContainerController::class, 'destroy'])->name('containers.destroy');

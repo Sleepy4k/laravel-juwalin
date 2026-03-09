@@ -10,6 +10,18 @@ enum ContainerStatus: string
     case Suspended = 'suspended';
     case Error = 'error';
 
+    /**
+     * Map a raw Proxmox status string to our enum value.
+     */
+    public static function fromProxmox(string $status): self
+    {
+        return match ($status) {
+            'running' => self::Running,
+            'paused', 'suspended' => self::Suspended,
+            default => self::Stopped,
+        };
+    }
+
     public function label(): string
     {
         return match ($this) {

@@ -12,12 +12,12 @@ class ContentSecurityPolicy
     {
         $response = $next($request);
 
-        // Derive ws(s):// origin from the WebSocket proxy URL for the terminal.
-        $proxyParts = parse_url(rtrim((string) config('proxmox.proxy_url'), '/'));
-        $proxyWsScheme = ($proxyParts['scheme'] ?? 'http') === 'https' ? 'wss' : 'ws';
-        $proxyWsHost = $proxyParts['host'] ?? 'localhost';
-        $proxyWsPort = isset($proxyParts['port']) ? ":{$proxyParts['port']}" : '';
-        $proxmoxOrigin = "{$proxyWsScheme}://{$proxyWsHost}{$proxyWsPort}";
+        // Derive wss:// origin from the WebSocket proxy URL for the terminal.
+        $proxyParts = parse_url(rtrim((string) config('proxmox.ws_proxy_url'), '/'));
+        $wsScheme = ($proxyParts['scheme'] ?? 'https') === 'https' ? 'wss' : 'ws';
+        $wsHost = $proxyParts['host'] ?? '127.0.0.1';
+        $wsPort = isset($proxyParts['port']) ? ":{$proxyParts['port']}" : '';
+        $wsOrigin = "{$wsScheme}://{$wsHost}{$wsPort}";
 
         $csp = implode('; ', [
             "default-src 'self'",
@@ -25,7 +25,7 @@ class ContentSecurityPolicy
             "style-src 'self' 'unsafe-inline' https://fonts.bunny.net https://cdn.jsdelivr.net",
             "font-src 'self' https://fonts.bunny.net data:",
             "img-src 'self' data: blob: https:",
-            "connect-src 'self' http://adip.store https://adip.store https://app.pakasir.com https://cdn.jsdelivr.net {$proxmoxOrigin}",
+            "connect-src 'self' http://adip.store https://adip.store https://app.pakasir.com https://cdn.jsdelivr.net {$wsOrigin}",
             "frame-ancestors 'none'",
             "base-uri 'self'",
             "form-action 'self' https://app.pakasir.com",

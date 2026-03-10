@@ -144,11 +144,13 @@
                 return;
             }
 
-            ws = new WebSocket(wsUrl);
+            ws = new WebSocket(wsUrl, 'binary');
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                ws.send(ticket + '\n');
+                const username = "KWU@pve"; // Sesuaikan dengan PROXMOX_CONSOLE_USERNAME di .env
+                const encoder = new TextEncoder();
+                ws.send(encoder.encode(username + ':' + ticket + '\n'));
                 sendResize();
                 setConnected();
             };

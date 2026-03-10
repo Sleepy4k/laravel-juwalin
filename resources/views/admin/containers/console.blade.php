@@ -128,7 +128,7 @@
 
         async function connect() {
             connLabel.classList.remove('hidden');
-            let wsUrl, ticket;
+            let wsUrl, ticket, username;
             try {
                 const resp = await fetch(@json(route('admin.containers.term-url', $container->id)), {
                     headers: { 'X-CSRF-TOKEN': @json(csrf_token()), 'Accept': 'application/json' },
@@ -138,17 +138,18 @@
                     showError(body.message ?? 'Gagal mendapatkan sesi console (HTTP ' + resp.status + ').');
                     return;
                 }
-                ({ wsUrl, ticket } = await resp.json());
+                ({ wsUrl, ticket, username } = await resp.json());
             } catch (e) {
                 showError('Tidak dapat terhubung ke server: ' + e.message);
                 return;
             }
 
-            ws = new WebSocket(wsUrl);
+            ws = new WebSocket(wsUrl, 'binary');
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                ws.send(ticket + '\n');
+                const encoder = new TextEncoder();
+                ws.send(encoder.encode(username + ':' + ticket + '\n'));
                 sendResize();
                 setConnected();
             };

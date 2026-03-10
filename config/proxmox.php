@@ -54,6 +54,23 @@ return [
 
     'secret' => env('PROXMOX_SECRET_KEY'),   // UUID generated in Datacenter > API Tokens
 
+    /*
+    |--------------------------------------------------------------------------
+    | Console Auth (User/Password)
+    |--------------------------------------------------------------------------
+    |
+    | Credentials used exclusively for the termproxy/vncproxy login flow.
+    | API Token auth cannot be used for termproxy because Proxmox embeds the
+    | full token identity (e.g. "KWU@pve!laravel") as the username, which its
+    | own WebSocket handshake rejects. A real user account (e.g. "KWU@pve")
+    | with password must be used here instead.
+    |
+    */
+
+    'console_username' => env('PROXMOX_CONSOLE_USERNAME'),  // e.g. KWU@pve
+
+    'console_password' => env('PROXMOX_CONSOLE_PASSWORD'),  // plain-text password for that user
+
     'verify_tls' => (bool) env('PROXMOX_VERIFY_TLS', false), // set true in production with valid cert
 
     /*

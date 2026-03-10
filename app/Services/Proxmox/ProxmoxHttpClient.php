@@ -92,6 +92,79 @@ final class ProxmoxHttpClient
         }
     }
 
+    // ─────────────────────────── Cookie/ticket auth ───────────────────────────
+
+    /**
+     * POST /api2/json/access/ticket — exchanges username + password for a
+     * PVEAuthCookie ticket and CSRF token. Does NOT use the API token header.
+     *
+     * @return array{ticket: string, CSRFPreventionToken: string, username: string}
+     *
+     * @throws RuntimeException on connection failure or invalid credentials
+     */
+    public function login(string $username, string $password): array
+    {
+        try {
+            $response = Http::withOptions([
+                'verify'          => $this->verifyTls,
+                'connect_timeout' => $this->timeout,
+            ])
+                ->timeout($this->timeout)
+                ->asForm()
+                ->post("{$this->baseUrl}/api2/json/access/ticket", [
+                    'username' => $username,
+                    'password' => $password,
+                ]);
+        } catch (ConnectionException $e) {
+            throw new RuntimeException("Cannot connect to Proxmox at {$this->baseUrl}: {$e->getMessage()}", 0, $e);
+        }
+
+        if ($response->failed()) {
+            throw new RuntimeException('Proxmox login failed: invalid credentials or user not found.');
+        }
+
+        $data = $response->json('data');
+
+        if (!is_array($data) || empty($data['ticket']) || empty($data['CSRFPreventionToken'])) {
+            throw new RuntimeException('Proxmox login returned an unexpected response.');
+        }
+
+        return [
+            'ticket'              => $data['ticket'],
+            'CSRFPreventionToken' => $data['CSRFPreventionToken'],
+            'username'            => $data['username'] ?? $username,
+        ];
+    }
+
+    /**
+     * POST using PVEAuthCookie session auth (ticket + CSRF header) instead of
+     * the API token. Required for endpoints that reject token identity strings.
+     *
+     * @param  array<string, mixed>                    $data
+     * @return array<mixed>|bool|float|int|string|null
+     */
+    public function postWithTicket(string $path, string $ticket, string $csrf, array $data = []): mixed
+    {
+        try {
+            return $this->unwrap(
+                Http::withHeaders([
+                    'Cookie'              => "PVEAuthCookie={$ticket}",
+                    'CSRFPreventionToken' => $csrf,
+                    'Accept'              => 'application/json',
+                ])
+                    ->withOptions([
+                        'verify'          => $this->verifyTls,
+                        'connect_timeout' => $this->timeout,
+                    ])
+                    ->timeout($this->timeout)
+                    ->asForm()
+                    ->post("{$this->baseUrl}/api2/json/{$path}", $data),
+            );
+        } catch (ConnectionException $e) {
+            throw new RuntimeException("Cannot connect to Proxmox at {$this->baseUrl}: {$e->getMessage()}", 0, $e);
+        }
+    }
+
     // ─────────────────────────────── HTTP internals ───────────────────────────
 
     private function client(): PendingRequest

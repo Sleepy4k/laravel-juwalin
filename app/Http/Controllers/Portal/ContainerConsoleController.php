@@ -60,8 +60,9 @@ class ContainerConsoleController extends Controller
         }
 
         return response()->json([
-            'wsUrl'  => $this->console->buildConsoleWsUrl($container->vmid, $container->node, $termProxy),
-            'ticket' => $termProxy['ticket'] ?? '',
+            'wsUrl'    => $this->console->buildConsoleWsUrl($container->vmid, $container->node, $termProxy),
+            'ticket'   => $termProxy['ticket'] ?? '',
+            'username' => $termProxy['username'] ?? '',
         ]);
     }
 }
